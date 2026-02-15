@@ -37,73 +37,75 @@ graph TB
 
 ### Component Responsibilities
 
-**User Interface Layer**: Renders the interactive canvas, text editors, and feedback displays. Handles all user interactions and delegates input events to the Input Manager.
+**User Interface Layer:** Renders the interactive canvas, document viewer, and feedback displays. It handles all user interactions (touch, stylus, keyboard) and delegates input events to the Input Manager.
 
-**Input Manager**: Routes user input to the appropriate mode handler based on current context. Implements debouncing and throttling to optimize feedback frequency.
+**Ingestion Layer:** Processes uploaded material (PDF, JPG, PNG) using OCR and logical extraction to populate the Vector Knowledge Base. This layer allows the AI to "read" the student's specific textbook or notes.
 
-**Mode Handlers** (Text, Automata, Use Case): Implement mode-specific logic for interpreting user input, validating content, and formatting feedback requests.
+**Input Manager:** Routes user input to the dynamic handler. It implements debouncing and throttling to optimize performance and maintain a 100ms UI responsiveness.
 
-**Feedback Engine**: Coordinates between mode handlers, AI service, and validation service to produce timely, relevant feedback. Manages feedback prioritization and presentation.
+**Universal Context Handler:** A context-aware module that adapts validation logic based on the specific material retrieved from the knowledge base, rather than relying on hardcoded rules.
 
-**AI Analysis Service**: Provides intelligent analysis of user input including error detection, suggestion generation, and contextual guidance.
+**Feedback Engine:** Coordinates between the Knowledge Base, AI service, and Validation service to produce timely, relevant feedback. It prioritizes feedback by severity to avoid cognitive overload.
 
-**Validation Service**: Implements rule-based validation for formal correctness (diagram syntax, problem-solving steps, etc.).
+**AI Analysis Service (RAG-Enabled):** Provides intelligent analysis of user input grounded in the uploaded documents. It generates error detection, suggestion generation, and progressive "nudge" hints.
 
-**Persistence Service**: Handles auto-save, version history, and state restoration.
+**Validation Service:** Implements rule-based validation for formal correctness when the user's material contains structured logic (e.g., mathematical proofs, UML diagrams, or chemical equations).
+
+**Persistence Service:** Handles 30-second auto-saves, version history, and state restoration to ensure no learning progress is lost.
 
 ## Components and Interfaces
 
-### Input Manager
+### Universal Ingestion & Management
 
 ```typescript
+interface IngestionService {
+  uploadMaterial(file: File): Promise<DocumentContext>
+  processOCR(file: File): Promise<string>
+  generateEmbeddings(content: string): Promise<void>
+}
+
 interface InputManager {
-  registerModeHandler(mode: Mode, handler: ModeHandler): void
   processInput(input: UserInput): void
-  setActiveMode(mode: Mode): void
+  setDocumentContext(context: DocumentContext): void
   getCurrentState(): ApplicationState
 }
 
 interface UserInput {
-  type: InputType  // TEXT | DIAGRAM_ELEMENT | DIAGRAM_CONNECTION
-  content: string | DiagramElement
+  type: InputType  // TEXT | DIAGRAM_ELEMENT | HANDWRITING
+  content: string | DiagramElement | StrokeData
   timestamp: number
   cursorPosition?: Position
 }
-
-enum InputType {
-  TEXT,
-  DIAGRAM_ELEMENT,
-  DIAGRAM_CONNECTION,
-  SELECTION,
-  DELETION
-}
 ```
 
-### Mode Handlers
+### RAG-Enabled Feedback Engine
 
 ```typescript
-interface ModeHandler {
-  handleInput(input: UserInput): FeedbackRequest
-  validateState(state: ModeState): ValidationResult[]
-  getSuggestions(context: Context): Suggestion[]
+interface FeedbackEngine {
+  requestGroundedFeedback(request: FeedbackRequest): Promise<Feedback>
+  prioritizeFeedback(items: FeedbackItem[]): FeedbackItem[]
+  presentFeedback(feedback: Feedback): void
 }
 
-interface TextModeHandler extends ModeHandler {
-  analyzeProblemType(text: string): ProblemType
-  trackSolutionProgress(steps: SolutionStep[]): Progress
+interface FeedbackRequest {
+  input: UserInput
+  currentState: ApplicationState
+  knowledgeContext: KnowledgeContext // Retrieved from Vector KB
 }
 
-interface AutomataModeHandler extends ModeHandler {
-  validateState(state: AutomataState): ValidationResult[]
-  checkCompleteness(diagram: AutomataDiagram): CompletenessResult
-  findUnreachableStates(diagram: AutomataDiagram): State[]
+interface FeedbackItem {
+  id: string
+  type: FeedbackType  // ERROR | WARNING | SUGGESTION | HINT
+  severity: Severity  // CRITICAL | HIGH | MEDIUM | LOW
+  location: Location
+  message: string
+  sourceReference: SourceReference // Page/Section link to uploaded PDF
 }
 
-interface UseCaseModeHandler extends ModeHandler {
-  validateActor(actor: Actor): ValidationResult[]
-  validateUseCase(useCase: UseCase): ValidationResult[]
-  validateRelationship(rel: Relationship): ValidationResult[]
-  checkUMLConventions(diagram: UseCaseDiagram): ValidationResult[]
+enum HintLevel {
+  GENTLE,      // Nudge in right direction
+  MODERATE,    // Specific guidance referencing source
+  DETAILED     // Step-by-step help from the syllabus
 }
 ```
 
@@ -148,55 +150,34 @@ enum FeedbackType {
   POSITIVE_REINFORCEMENT
 }
 ```
+## Data Models
 
-### AI Analysis Service
+
+### Core Learning Models
 
 ```typescript
-interface AIAnalysisService {
-  analyzeText(text: string, context: Context): Promise<AnalysisResult>
-  analyzeDiagram(diagram: Diagram, type: DiagramType): Promise<AnalysisResult>
-  generateHint(problem: Problem, progress: Progress, level: HintLevel): Promise<Hint>
-  suggestImprovements(content: Content): Promise<Suggestion[]>
+interface ApplicationState {
+  sessionId: string
+  documentContext: DocumentContext // Metadata for uploaded material
+  canvasState: CanvasState         // Current handwriting/drawing data
+  feedbackState: FeedbackState
+  lastSaved: number
 }
 
-interface AnalysisResult {
-  errors: Error[]
-  suggestions: Suggestion[]
-  confidence: number
-  processingTime: number
+interface KnowledgeContext {
+  relevantExcerpts: string[]       // Top-k retrieved chunks from Vector KB
+  sourceMetadata: SourceMetadata   // Page numbers, document titles
+  problemLogic: Record<string, any> // Extracted rules for current task
 }
 
-enum HintLevel {
-  GENTLE,      // Nudge in right direction
-  MODERATE,    // More specific guidance
-  DETAILED     // Step-by-step help
+interface SourceReference {
+  documentId: string
+  pageNumber: number
+  textSnippet: string
 }
 ```
 
-### Validation Service
-
-```typescript
-interface ValidationService {
-  validateAutomata(diagram: AutomataDiagram): ValidationResult[]
-  validateUseCase(diagram: UseCaseDiagram): ValidationResult[]
-  validateProblemSolution(solution: Solution, problem: Problem): ValidationResult[]
-}
-
-interface ValidationResult {
-  isValid: boolean
-  errors: ValidationError[]
-  warnings: ValidationWarning[]
-}
-
-interface ValidationError {
-  rule: string
-  location: Location
-  message: string
-  fix?: string
-}
-```
-
-### Persistence Service
+### Persistence & Sync
 
 ```typescript
 interface PersistenceService {
@@ -204,160 +185,10 @@ interface PersistenceService {
   loadSession(sessionId: string): Promise<ApplicationState>
   saveVersion(state: ApplicationState): Promise<Version>
   getVersionHistory(sessionId: string): Promise<Version[]>
-  clearOldVersions(sessionId: string, keepCount: number): Promise<void>
-}
-
-interface Version {
-  id: string
-  timestamp: number
-  state: ApplicationState
-  description?: string
-}
-```
-
-## Data Models
-
-### Core Models
-
-```typescript
-interface ApplicationState {
-  sessionId: string
-  mode: Mode
-  textState?: TextState
-  diagramState?: DiagramState
-  feedbackState: FeedbackState
-  lastSaved: number
-}
-
-enum Mode {
-  TEXT,
-  AUTOMATA,
-  USE_CASE
-}
-
-interface TextState {
-  content: string
-  cursorPosition: Position
-  problemType?: ProblemType
-  solutionSteps: SolutionStep[]
-}
-
-interface DiagramState {
-  type: DiagramType
-  elements: DiagramElement[]
-  connections: Connection[]
-  selectedElements: string[]
-}
-
-enum DiagramType {
-  AUTOMATA,
-  USE_CASE
-}
-
-interface DiagramElement {
-  id: string
-  type: ElementType
-  position: Position
-  properties: Record<string, any>
-}
-
-interface Position {
-  x: number
-  y: number
-}
-
-interface Connection {
-  id: string
-  source: string
-  target: string
-  type: ConnectionType
-  label?: string
-}
-```
-
-### Automata-Specific Models
-
-```typescript
-interface AutomataDiagram {
-  states: State[]
-  transitions: Transition[]
-  initialState?: string
-  acceptingStates: string[]
-  alphabet: string[]
-}
-
-interface State {
-  id: string
-  label: string
-  position: Position
-  isInitial: boolean
-  isAccepting: boolean
-}
-
-interface Transition {
-  id: string
-  from: string
-  to: string
-  symbol: string
-}
-```
-
-### Use Case-Specific Models
-
-```typescript
-interface UseCaseDiagram {
-  actors: Actor[]
-  useCases: UseCase[]
-  relationships: Relationship[]
-  systemBoundary?: Boundary
-}
-
-interface Actor {
-  id: string
-  name: string
-  position: Position
-  type: ActorType  // PRIMARY | SECONDARY | SYSTEM
-}
-
-interface UseCase {
-  id: string
-  name: string
-  position: Position
-  description?: string
-}
-
-interface Relationship {
-  id: string
-  type: RelationshipType  // ASSOCIATION | INCLUDE | EXTEND | GENERALIZATION
-  source: string
-  target: string
-}
-
-enum RelationshipType {
-  ASSOCIATION,
-  INCLUDE,
-  EXTEND,
-  GENERALIZATION
-}
-```
-
-### Feedback Models
-
-```typescript
-interface FeedbackState {
-  activeFeedback: Map<string, FeedbackItem>
-  feedbackHistory: FeedbackItem[]
-  dismissedFeedback: Set<string>
-}
-
-interface Context {
-  problemType?: ProblemType
-  learningObjectives?: string[]
-  previousErrors?: Error[]
-  sessionDuration: number
 }
 ```
 
 
 ## 
+
 
