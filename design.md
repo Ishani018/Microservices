@@ -2,9 +2,13 @@
 
 ## Overview
 
-The AI Tutor Real-Time Feedback System is an interactive learning platform that provides immediate, continuous guidance as students work through educational content. The system architecture is built around three core interaction modes: text-based problem solving, automata diagram creation, and use case diagram creation. Each mode shares a common feedback engine while implementing mode-specific validation and guidance logic.
+Trace is an interactive learning platform that provides immediate, continuous guidance as students work through educational content. Moving beyond fixed interaction modes, the system now employs a Universal Multimodal Workspace architecture. This allows users to upload any source material—such as PDFs, high-resolution images, or lecture notes—to serve as the ground-truth knowledge base for real-time, syllabus-specific tutoring.
 
-The system employs a reactive architecture where user inputs trigger immediate analysis pipelines that produce feedback within strict latency constraints (500ms for AI analysis, 100ms for UI updates). This design ensures a natural, uninterrupted learning experience while maintaining the pedagogical value of immediate correction.
+The platform utilizes a reactive architecture to ensure that user inputs (handwriting, drawing, or typing) trigger analysis pipelines producing feedback within strict latency constraints:
+
+500ms for AI analysis
+
+100ms for UI updates.
 
 ## Architecture
 
@@ -358,5 +362,6 @@ interface Context {
   sessionDuration: number
 }
 ```
+
 
 ## 
