@@ -16,27 +16,22 @@ The platform utilizes a reactive architecture to ensure that user inputs (handwr
 
 ```mermaid
 graph TB
-    UI[User Interface Layer]
-    IM[Input Manager]
-    TM[Text Mode Handler]
-    AM[Automata Mode Handler]
-    UM[Use Case Mode Handler]
-    FE[Feedback Engine]
-    AI[AI Analysis Service]
-    VS[Validation Service]
-    PS[Persistence Service]
+    subgraph Ingestion_Layer
+        UL[File Uploader] --> OCR[OCR & Logic Extraction]
+        OCR --> KB[(Vector Knowledge Base)]
+    end
+
+    UI[User Interface Layer] --> IM[Input Manager]
+    IM --> MH[Universal Context Handler]
     
-    UI --> IM
-    IM --> TM
-    IM --> AM
-    IM --> UM
-    TM --> FE
-    AM --> FE
-    UM --> FE
-    FE --> AI
-    FE --> VS
-    FE --> UI
-    IM --> PS
+    KB --> FE
+    MH --> FE[RAG-Enabled Feedback Engine]
+    FE --> AI[AI Analysis Service]
+    FE --> VS[Validation Service]
+    
+    AI --> UI
+    VS --> UI
+    IM --> PS[Persistence Service]
     PS --> UI
 ```
 
@@ -365,3 +360,4 @@ interface Context {
 
 
 ## 
+
